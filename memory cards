@@ -1,0 +1,211 @@
+import React, { useState, useEffect } from 'react';
+
+// רשימת האמוג'ים שיופיעו על הקלפים (צומצם ל-5 זוגות)
+const EMOJIS = ['🍎', '🍌', '🍉', '🍇', '🍓'];
+
+// פונקציה לערבוב מערך (אלגוריתם Fisher-Yates)
+const shuffleArray = (array) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+export default function App() {
+  const [cards, setCards] = useState([]);
+  const [flippedIndices, setFlippedIndices] = useState([]);
+  const [matchedPairs, setMatchedPairs] = useState(0);
+  
+  // משתני מצב חדשים עבור 2 שחקנים
+  const [scores, setScores] = useState({ 1: 0, 2: 0 });
+  const [currentPlayer, setCurrentPlayer] = useState(1);
+  
+  const [isLocked, setIsLocked] = useState(false);
+  const [isWon, setIsWon] = useState(false);
+
+  // אתחול המשחק
+  const initializeGame = () => {
+    const duplicatedEmojis = [...EMOJIS, ...EMOJIS];
+    const shuffledCards = shuffleArray(duplicatedEmojis).map((emoji, index) => ({
+      id: index,
+      emoji,
+      isFlipped: false,
+      isMatched: false,
+    }));
+
+    setCards(shuffledCards);
+    setFlippedIndices([]);
+    setMatchedPairs(0);
+    setScores({ 1: 0, 2: 0 });
+    setCurrentPlayer(1);
+    setIsWon(false);
+    setIsLocked(false);
+  };
+
+  // מופעל פעם אחת כשהרכיב נטען
+  useEffect(() => {
+    initializeGame();
+  }, []);
+
+  // בדיקת ניצחון
+  useEffect(() => {
+    if (matchedPairs === EMOJIS.length && EMOJIS.length > 0) {
+      setTimeout(() => setIsWon(true), 500);
+    }
+  }, [matchedPairs]);
+
+  // טיפול בלחיצה על קלף
+  const handleCardClick = (index) => {
+    // מניעת לחיצה אם הלוח נעול, הקלף כבר הפוך או כבר הותאם
+    if (isLocked || cards[index].isFlipped || cards[index].isMatched) return;
+
+    // הפוך את הקלף הנבחר
+    const newCards = [...cards];
+    newCards[index].isFlipped = true;
+    setCards(newCards);
+
+    const newFlippedIndices = [...flippedIndices, index];
+    setFlippedIndices(newFlippedIndices);
+
+    // אם שני קלפים נהפכו, בדוק התאמה
+    if (newFlippedIndices.length === 2) {
+      setIsLocked(true);
+
+      const [firstIndex, secondIndex] = newFlippedIndices;
+
+      if (cards[firstIndex].emoji === cards[secondIndex].emoji) {
+        // יש התאמה! השחקן מקבל נקודה ושומר על התור שלו
+        setTimeout(() => {
+          const matchedCards = [...cards];
+          matchedCards[firstIndex].isMatched = true;
+          matchedCards[secondIndex].isMatched = true;
+          setCards(matchedCards);
+          setFlippedIndices([]);
+          setMatchedPairs((p) => p + 1);
+          setScores((prev) => ({ ...prev, [currentPlayer]: prev[currentPlayer] + 1 }));
+          setIsLocked(false);
+        }, 500);
+      } else {
+        // אין התאמה - הפוך חזרה אחרי השהייה קלה והעבר תור לשחקן השני
+        setTimeout(() => {
+          const resetCards = [...cards];
+          resetCards[firstIndex].isFlipped = false;
+          resetCards[secondIndex].isFlipped = false;
+          setCards(resetCards);
+          setFlippedIndices([]);
+          setCurrentPlayer((prev) => (prev === 1 ? 2 : 1));
+          setIsLocked(false);
+        }, 1000);
+      }
+    }
+  };
+
+  return (
+    <div dir="rtl" className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 py-10 px-4 flex flex-col items-center font-sans">
+      
+      {/* הוספת סגנונות CSS ייעודיים לאנימציית ההיפוך (תלת מימד) */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+      `}} />
+
+      <div className="max-w-xl w-full">
+        {/* כותרת ונתונים */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-indigo-900 mb-4 tracking-tight drop-shadow-sm">
+            משחק זיכרון
+          </h1>
+          
+          {/* לוח תוצאות ותור */}
+          <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 shadow-sm border border-white/50 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <div className={`p-3 rounded-xl transition-all ${currentPlayer === 1 ? 'bg-indigo-500 text-white shadow-md scale-105' : 'bg-transparent text-indigo-800'}`}>
+                <p className="font-bold text-lg">שחקן 1</p>
+                <p className="text-2xl text-center">{scores[1]}</p>
+              </div>
+              
+              <div className="text-center">
+                <p className="text-sm font-semibold text-gray-500 mb-1">תור עכשיו</p>
+                <div className="text-xl font-black text-indigo-700 bg-indigo-100 px-4 py-1 rounded-full shadow-sm border border-indigo-200">
+                  שחקן {currentPlayer}
+                </div>
+              </div>
+
+              <div className={`p-3 rounded-xl transition-all ${currentPlayer === 2 ? 'bg-purple-500 text-white shadow-md scale-105' : 'bg-transparent text-purple-800'}`}>
+                <p className="font-bold text-lg">שחקן 2</p>
+                <p className="text-2xl text-center">{scores[2]}</p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={initializeGame}
+              className="w-full py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-medium rounded-xl transition-colors active:scale-95"
+            >
+              התחל משחק חדש
+            </button>
+          </div>
+        </div>
+
+        {/* לוח הקלפים (הותאם ל-5 עמודות) */}
+        <div className="grid grid-cols-5 gap-2 sm:gap-3 md:gap-4 perspective-1000">
+          {cards.map((card, index) => (
+            <div 
+              key={card.id}
+              className="relative w-full aspect-[3/4] cursor-pointer group perspective-1000"
+              onClick={() => handleCardClick(index)}
+            >
+              <div 
+                className={`w-full h-full transition-transform duration-500 transform-style-3d relative rounded-2xl shadow-md
+                  ${(card.isFlipped || card.isMatched) ? 'rotate-y-180' : ''}
+                  ${card.isMatched ? 'opacity-70' : ''}
+                `}
+              >
+                {/* צד קדמי (הגב של הקלף) */}
+                <div className="absolute inset-0 backface-hidden bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center border-2 border-indigo-300/30 group-hover:shadow-lg transition-shadow">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-white/30 rounded-full flex items-center justify-center">
+                    <span className="text-white/50 text-lg sm:text-xl font-bold">?</span>
+                  </div>
+                </div>
+
+                {/* צד אחורי (האמוג'י) */}
+                <div className="absolute inset-0 backface-hidden rotate-y-180 bg-white rounded-2xl flex items-center justify-center text-4xl sm:text-5xl border-2 border-purple-200">
+                  {card.emoji}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* הודעת ניצחון מעודכנת */}
+        {isWon && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-bounce-in">
+              <div className="text-6xl mb-4">🏆</div>
+              <h2 className="text-3xl font-bold text-gray-800 mb-2">המשחק נגמר!</h2>
+              <p className="text-xl text-gray-600 mb-6 font-medium">
+                {scores[1] > scores[2] ? 'שחקן 1 ניצח!' : 
+                 scores[2] > scores[1] ? 'שחקן 2 ניצח!' : 
+                 'תיקו!'}
+              </p>
+              <div className="flex justify-center gap-6 mb-6 text-lg">
+                <div className="text-center"><span className="block font-bold text-indigo-600">שחקן 1</span> {scores[1]} זוגות</div>
+                <div className="text-center"><span className="block font-bold text-purple-600">שחקן 2</span> {scores[2]} זוגות</div>
+              </div>
+              <button 
+                onClick={initializeGame}
+                className="w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-lg"
+              >
+                שחק שוב
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
