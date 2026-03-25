@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // ==========================================
 // עזרים ונתונים גלובליים
 // ==========================================
-const EMOJIS = ['🍎', '🍌', '🍉', '🍇', '🍓'];
+const EMOJIS = ['🍎', '🍌', '🍉', '🍇', '🍓', '🍒', '🍍', '🥝', '🥑', '🥥'];
 
 const shuffleArray = (array) => {
   const shuffled = [...array];
@@ -14,20 +14,302 @@ const shuffleArray = (array) => {
   return shuffled;
 };
 
+// יצירת צליל הצלחה באמצעות Web Audio API (כדי שלא נצטרך קבצי אודיו חיצוניים)
+const playSuccessSound = () => {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    osc.type = 'sine';
+    // מתחיל בצליל נמוך ועולה לגבוה (צליל חיובי של הצלחה)
+    osc.frequency.setValueAtTime(440, ctx.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1); 
+    
+    gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (e) {
+    console.log('Audio not supported or blocked');
+  }
+};
+
+// ==========================================
+// רכיב זיקוקים (מופעל בסיום משחק ההתאמה)
+// ==========================================
+function Fireworks() {
+  const [particles, setParticles] = useState([]);
+
+  useEffect(() => {
+    // יצירת חלקיקי זיקוקים במיקומים אקראיים
+    const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+    const newParticles = [];
+    
+    // נייצר 5 פיצוצים, בכל אחד 20 חלקיקים
+    for (let burst = 0; burst < 5; burst++) {
+      const startX = 20 + Math.random() * 60; // אחוזים ברוחב המסך
+      const startY = 20 + Math.random() * 40; // אחוזים בגובה המסך
+      
+      for (let i = 0; i < 20; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const velocity = 50 + Math.random() * 100;
+        const tx = Math.cos(angle) * velocity;
+        const ty = Math.sin(angle) * velocity;
+        
+        newParticles.push({
+          id: `${burst}-${i}`,
+          x: startX,
+          y: startY,
+          tx: tx,
+          ty: ty,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          delay: Math.random() * 0.2
+        });
+      }
+    }
+    setParticles(newParticles);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="absolute w-2 h-2 rounded-full animate-firework opacity-0"
+          style={{
+            left: `${p.x}vw`,
+            top: `${p.y}vh`,
+            backgroundColor: p.color,
+            '--tx': `${p.tx}px`,
+            '--ty': `${p.ty}px`,
+            animationDelay: `${p.delay}s`,
+            boxShadow: `0 0 6px ${p.color}`
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ==========================================
+// רכיב משחק התאמת כמויות (המשחק החדש)
+// ==========================================
+function NumbersGame({ onBack }) {
+  const NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const [shuffledShapes, setShuffledShapes] = useState([]);
+  const [matchedNumbers, setMatchedNumbers] = useState([]);
+  const [selectedShape, setSelectedShape] = useState(null); // לתמיכה בלחיצה (למסכי מגע) במקום רק גרירה
+  const [isWon, setIsWon] = useState(false);
+
+  useEffect(() => {
+    initializeGame();
+  }, []);
+
+  const initializeGame = () => {
+    setShuffledShapes(shuffleArray([...NUMBERS]));
+    setMatchedNumbers([]);
+    setSelectedShape(null);
+    setIsWon(false);
+  };
+
+  useEffect(() => {
+    if (matchedNumbers.length === NUMBERS.length) {
+      setTimeout(() => setIsWon(true), 500);
+    }
+  }, [matchedNumbers]);
+
+  // טיפול בעת התחלת גרירה
+  const handleDragStart = (e, numberValue) => {
+    setSelectedShape(numberValue);
+    e.dataTransfer.setData('text/plain', numberValue.toString());
+  };
+
+  // מניעת ברירת מחדל כדי לאפשר שחרור
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  // טיפול בעת שחרור האלמנט או בעת לחיצה על מספר
+  const handleDropOrClickTarget = (e, targetNumber) => {
+    if (e) e.preventDefault();
+    
+    // אם זו גרירה, ניקח את הנתון מה-dataTransfer. אם זו לחיצה נשתמש ב-selectedShape.
+    let draggedNum = selectedShape;
+    if (e && e.dataTransfer) {
+      const transferredData = e.dataTransfer.getData('text/plain');
+      if (transferredData) draggedNum = parseInt(transferredData, 10);
+    }
+
+    if (draggedNum === targetNumber && !matchedNumbers.includes(targetNumber)) {
+      // התאמה מוצלחת!
+      setMatchedNumbers((prev) => [...prev, targetNumber]);
+      playSuccessSound();
+      setSelectedShape(null);
+    } else {
+      // טעות - רק נבטל את הבחירה
+      setSelectedShape(null);
+    }
+  };
+
+  const renderShapes = (count) => {
+    const shapes = [];
+    for (let i = 0; i < count; i++) {
+      shapes.push(<span key={i} className="text-xl sm:text-2xl drop-shadow-sm">⭐</span>);
+    }
+    return (
+      <div className="flex flex-wrap justify-center items-center content-center gap-1 w-full h-full p-2">
+        {shapes}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-5xl mx-auto">
+      {/* סגנונות מיוחדים למשחק הזה */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .neon-glow {
+          box-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px #0ea5e9, 0 0 40px #0ea5e9;
+          border-color: #0ea5e9 !important;
+          color: #0284c7 !important;
+          background-color: #f0f9ff !important;
+        }
+        @keyframes firework {
+          0% { transform: translateY(0) scale(1); opacity: 1; }
+          100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+        }
+        .animate-firework { animation: firework 1.5s ease-out forwards; }
+      `}} />
+
+      {isWon && <Fireworks />}
+
+      <div className="w-full flex justify-start mb-4">
+        <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-white/60 hover:bg-white rounded-xl shadow-sm transition-all text-indigo-800 font-semibold backdrop-blur-md">
+          <span className="text-xl">⟵</span> חזור לתפריט
+        </button>
+      </div>
+
+      <div className="text-center mb-6 w-full">
+        <h1 className="text-4xl md:text-5xl font-extrabold text-indigo-900 mb-2 tracking-tight drop-shadow-sm">
+          התאמת כמויות
+        </h1>
+        <p className="text-lg text-indigo-700 font-medium bg-white/50 inline-block px-4 py-1 rounded-full">
+          גררו (או לחצו) על קלף הצורות והתאימו אותו למספר הנכון!
+        </p>
+      </div>
+
+      <div className="bg-white/60 backdrop-blur-md rounded-3xl p-4 sm:p-6 shadow-xl border border-white/50 w-full flex flex-col gap-8">
+        
+        {/* אזור קלפי המספרים (1 עד 10 בסדר קבוע, משמאל לימין) */}
+        <div>
+          <h2 className="text-xl font-bold text-gray-700 mb-3 text-center">מספרים (גררו לכאן)</h2>
+          {/* שימוש ב-dir="ltr" כדי להבטיח תצוגה משמאל לימין גם כשהמסמך מימין לשמאל */}
+          <div dir="ltr" className="grid grid-cols-5 md:grid-cols-10 gap-2 sm:gap-3">
+            {NUMBERS.map((num) => {
+              const isMatched = matchedNumbers.includes(num);
+              return (
+                <div
+                  key={`num-${num}`}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDropOrClickTarget(e, num)}
+                  onClick={() => handleDropOrClickTarget(null, num)}
+                  className={`
+                    aspect-[3/4] rounded-2xl flex items-center justify-center text-4xl sm:text-5xl font-black transition-all duration-300
+                    ${isMatched 
+                      ? 'neon-glow z-10 scale-105' 
+                      : 'bg-white border-2 border-dashed border-gray-300 text-gray-400 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer shadow-sm'}
+                  `}
+                >
+                  {num}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="w-full h-px bg-indigo-100 rounded-full"></div>
+
+        {/* אזור קלפי הצורות (מעורבבים) */}
+        <div>
+          <h2 className="text-xl font-bold text-gray-700 mb-3 text-center">צורות (גררו מכאן)</h2>
+          <div dir="ltr" className="grid grid-cols-5 md:grid-cols-10 gap-2 sm:gap-3">
+            {shuffledShapes.map((shapeQty, index) => {
+              const isMatched = matchedNumbers.includes(shapeQty);
+              const isSelected = selectedShape === shapeQty;
+              
+              if (isMatched) {
+                // הצגת אזור ריק או שקוף כשכבר הותאם כדי לשמור על המבנה
+                return <div key={`empty-${index}`} className="aspect-[3/4] bg-transparent"></div>;
+              }
+
+              return (
+                <div
+                  key={`shape-${shapeQty}`}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, shapeQty)}
+                  onClick={() => setSelectedShape(shapeQty)}
+                  className={`
+                    aspect-[3/4] bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl border-2 shadow-md cursor-grab active:cursor-grabbing hover:shadow-lg transition-transform hover:-translate-y-1 overflow-hidden
+                    ${isSelected ? 'border-orange-500 ring-4 ring-orange-200 scale-105' : 'border-orange-200'}
+                  `}
+                >
+                  {renderShapes(shapeQty)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      </div>
+
+      {/* מסך ניצחון */}
+      {isWon && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-bounce-in z-50">
+            <div className="text-6xl mb-4">🌟</div>
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">אלופים!</h2>
+            <p className="text-xl text-gray-600 mb-6 font-medium">
+              התאמתם את כל המספרים!
+            </p>
+            <button onClick={initializeGame} className="w-full mb-3 py-4 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-lg">
+              שחקו שוב
+            </button>
+            <button onClick={onBack} className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors active:scale-95">
+              חזור לתפריט
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ==========================================
 // רכיב משחק זיכרון
 // ==========================================
 function MemoryGame({ onBack }) {
+  const [gameState, setGameState] = useState('setup'); // 'setup' או 'playing'
+  const [settings, setSettings] = useState({ players: 2, pairs: 5 });
+
   const [cards, setCards] = useState([]);
   const [flippedIndices, setFlippedIndices] = useState([]);
   const [matchedPairs, setMatchedPairs] = useState(0);
   const [scores, setScores] = useState({ 1: 0, 2: 0 });
+  const [moves, setMoves] = useState(0);
   const [currentPlayer, setCurrentPlayer] = useState(1);
   const [isLocked, setIsLocked] = useState(false);
   const [isWon, setIsWon] = useState(false);
 
-  const initializeGame = () => {
-    const duplicatedEmojis = [...EMOJIS, ...EMOJIS];
+  const startGame = () => {
+    // לקיחת כמות האמוג'ים הרצויה לפי בחירת השחקן
+    const selectedEmojis = EMOJIS.slice(0, settings.pairs);
+    const duplicatedEmojis = [...selectedEmojis, ...selectedEmojis];
     const shuffledCards = shuffleArray(duplicatedEmojis).map((emoji, index) => ({
       id: index,
       emoji,
@@ -39,20 +321,18 @@ function MemoryGame({ onBack }) {
     setFlippedIndices([]);
     setMatchedPairs(0);
     setScores({ 1: 0, 2: 0 });
+    setMoves(0);
     setCurrentPlayer(1);
     setIsWon(false);
     setIsLocked(false);
+    setGameState('playing');
   };
 
   useEffect(() => {
-    initializeGame();
-  }, []);
-
-  useEffect(() => {
-    if (matchedPairs === EMOJIS.length && EMOJIS.length > 0) {
+    if (gameState === 'playing' && matchedPairs === settings.pairs && settings.pairs > 0) {
       setTimeout(() => setIsWon(true), 500);
     }
-  }, [matchedPairs]);
+  }, [matchedPairs, settings.pairs, gameState]);
 
   const handleCardClick = (index) => {
     if (isLocked || cards[index].isFlipped || cards[index].isMatched) return;
@@ -66,6 +346,8 @@ function MemoryGame({ onBack }) {
 
     if (newFlippedIndices.length === 2) {
       setIsLocked(true);
+      setMoves((m) => m + 1); // הוספת מהלך עבור שחקן יחיד
+
       const [firstIndex, secondIndex] = newFlippedIndices;
 
       if (cards[firstIndex].emoji === cards[secondIndex].emoji) {
@@ -76,7 +358,9 @@ function MemoryGame({ onBack }) {
           setCards(matchedCards);
           setFlippedIndices([]);
           setMatchedPairs((p) => p + 1);
-          setScores((prev) => ({ ...prev, [currentPlayer]: prev[currentPlayer] + 1 }));
+          if (settings.players === 2) {
+            setScores((prev) => ({ ...prev, [currentPlayer]: prev[currentPlayer] + 1 }));
+          }
           setIsLocked(false);
         }, 500);
       } else {
@@ -86,7 +370,9 @@ function MemoryGame({ onBack }) {
           resetCards[secondIndex].isFlipped = false;
           setCards(resetCards);
           setFlippedIndices([]);
-          setCurrentPlayer((prev) => (prev === 1 ? 2 : 1));
+          if (settings.players === 2) {
+            setCurrentPlayer((prev) => (prev === 1 ? 2 : 1));
+          }
           setIsLocked(false);
         }, 1000);
       }
@@ -94,8 +380,7 @@ function MemoryGame({ onBack }) {
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-xl mx-auto">
-      {/* כפתור חזרה */}
+    <div className="flex flex-col items-center w-full max-w-2xl mx-auto">
       <div className="w-full flex justify-start mb-4">
         <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-white/60 hover:bg-white rounded-xl shadow-sm transition-all text-indigo-800 font-semibold backdrop-blur-md">
           <span className="text-xl">⟵</span> חזור לתפריט
@@ -107,65 +392,146 @@ function MemoryGame({ onBack }) {
           משחק זיכרון
         </h1>
         
-        <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 shadow-sm border border-white/50">
-          <div className="flex justify-between items-center mb-4">
-            <div className={`p-3 rounded-xl transition-all ${currentPlayer === 1 ? 'bg-indigo-500 text-white shadow-md scale-105' : 'bg-transparent text-indigo-800'}`}>
-              <p className="font-bold text-lg">שחקן 1</p>
-              <p className="text-2xl text-center">{scores[1]}</p>
-            </div>
+        {gameState === 'setup' ? (
+          /* מסך ההגדרות */
+          <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 sm:p-8 shadow-xl border border-white/50 w-full max-w-md mx-auto animate-bounce-in">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">הגדרות משחק</h2>
             
-            <div className="text-center px-2">
-              <p className="text-sm font-semibold text-gray-500 mb-1">תור עכשיו</p>
-              <div className="text-xl font-black text-indigo-700 bg-indigo-100 px-4 py-1 rounded-full shadow-sm border border-indigo-200">
-                שחקן {currentPlayer}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-semibold mb-3">מספר שחקנים</label>
+              <div className="flex bg-indigo-50 rounded-xl p-1">
+                {[1, 2].map(num => (
+                  <button
+                    key={num}
+                    onClick={() => setSettings(s => ({ ...s, players: num }))}
+                    className={`flex-1 py-2 text-lg font-bold rounded-lg transition-all ${settings.players === num ? 'bg-indigo-500 text-white shadow-md' : 'text-indigo-600 hover:bg-indigo-100'}`}
+                  >
+                    {num} {num === 1 ? 'שחקן' : 'שחקנים'}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className={`p-3 rounded-xl transition-all ${currentPlayer === 2 ? 'bg-purple-500 text-white shadow-md scale-105' : 'bg-transparent text-purple-800'}`}>
-              <p className="font-bold text-lg">שחקן 2</p>
-              <p className="text-2xl text-center">{scores[2]}</p>
+            <div className="mb-8">
+              <label className="block text-gray-700 font-semibold mb-3">כמות זוגות (5-10)</label>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {[5, 6, 7, 8, 9, 10].map(num => (
+                  <button
+                    key={num}
+                    onClick={() => setSettings(s => ({ ...s, pairs: num }))}
+                    className={`w-12 h-12 text-xl font-bold rounded-xl transition-all ${settings.pairs === num ? 'bg-purple-500 text-white shadow-md scale-110' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          
-          <button onClick={initializeGame} className="w-full py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-medium rounded-xl transition-colors active:scale-95">
-            התחל משחק חדש
-          </button>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-5 gap-2 sm:gap-3 md:gap-4 perspective-1000 w-full">
-        {cards.map((card, index) => (
-          <div key={card.id} className="relative w-full aspect-[3/4] cursor-pointer group perspective-1000" onClick={() => handleCardClick(index)}>
-            <div className={`w-full h-full transition-transform duration-500 transform-style-3d relative rounded-2xl shadow-md
-                ${(card.isFlipped || card.isMatched) ? 'rotate-y-180' : ''}
-                ${card.isMatched ? 'opacity-70' : ''}`}>
-              <div className="absolute inset-0 backface-hidden bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center border-2 border-indigo-300/30 group-hover:shadow-lg transition-shadow">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-white/30 rounded-full flex items-center justify-center">
-                  <span className="text-white/50 text-lg sm:text-xl font-bold">?</span>
+            <button 
+              onClick={startGame}
+              className="w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-lg"
+            >
+              התחל משחק
+            </button>
+          </div>
+        ) : (
+          /* הלוח והמשחק הפעיל */
+          <>
+            <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 shadow-sm border border-white/50 mb-6">
+              {settings.players === 2 ? (
+                <div className="flex justify-between items-center mb-4">
+                  <div className={`p-3 rounded-xl transition-all ${currentPlayer === 1 ? 'bg-indigo-500 text-white shadow-md scale-105' : 'bg-transparent text-indigo-800'}`}>
+                    <p className="font-bold text-lg">שחקן 1</p>
+                    <p className="text-2xl text-center">{scores[1]}</p>
+                  </div>
+                  
+                  <div className="text-center px-2">
+                    <p className="text-sm font-semibold text-gray-500 mb-1">תור עכשיו</p>
+                    <div className="text-xl font-black text-indigo-700 bg-indigo-100 px-4 py-1 rounded-full shadow-sm border border-indigo-200">
+                      שחקן {currentPlayer}
+                    </div>
+                  </div>
+
+                  <div className={`p-3 rounded-xl transition-all ${currentPlayer === 2 ? 'bg-purple-500 text-white shadow-md scale-105' : 'bg-transparent text-purple-800'}`}>
+                    <p className="font-bold text-lg">שחקן 2</p>
+                    <p className="text-2xl text-center">{scores[2]}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="absolute inset-0 backface-hidden rotate-y-180 bg-white rounded-2xl flex items-center justify-center text-4xl sm:text-5xl border-2 border-purple-200">
-                {card.emoji}
-              </div>
+              ) : (
+                <div className="flex justify-around items-center mb-4">
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-gray-500 mb-1">מהלכים</p>
+                    <p className="text-3xl font-black text-indigo-600">{moves}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-gray-500 mb-1">זוגות שנמצאו</p>
+                    <p className="text-3xl font-black text-purple-600">{matchedPairs} / {settings.pairs}</p>
+                  </div>
+                </div>
+              )}
+              
+              <button onClick={() => setGameState('setup')} className="w-full py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-medium rounded-xl transition-colors active:scale-95">
+                חזור להגדרות
+              </button>
             </div>
-          </div>
-        ))}
+
+            {/* לוח הקלפים מותאם לעד 10 זוגות (עד 20 קלפים) */}
+            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3 md:gap-4 perspective-1000 w-full">
+              {cards.map((card, index) => (
+                <div key={card.id} className="relative w-full aspect-[3/4] cursor-pointer group perspective-1000" onClick={() => handleCardClick(index)}>
+                  <div className={`w-full h-full transition-transform duration-500 transform-style-3d relative rounded-2xl shadow-md
+                      ${(card.isFlipped || card.isMatched) ? 'rotate-y-180' : ''}`}>
+                    
+                    {/* צד קדמי (הגב של הקלף) */}
+                    <div className="absolute inset-0 backface-hidden bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center border-2 border-indigo-300/30 group-hover:shadow-lg transition-shadow">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-white/30 rounded-full flex items-center justify-center">
+                        <span className="text-white/50 text-lg sm:text-xl font-bold">?</span>
+                      </div>
+                    </div>
+
+                    {/* צד אחורי (האמוג'י) - מקבל צבע כהה מאוד בהתאמה */}
+                    <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl flex items-center justify-center text-4xl sm:text-5xl border-2 transition-colors duration-500
+                      ${card.isMatched ? 'bg-gray-800 border-gray-900 shadow-inner' : 'bg-white border-purple-200'}
+                    `}>
+                      <span className={`${card.isMatched ? 'opacity-40 grayscale' : ''} transition-all duration-500`}>
+                        {card.emoji}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {isWon && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-bounce-in">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-bounce-in z-50">
             <div className="text-6xl mb-4">🏆</div>
             <h2 className="text-3xl font-bold text-gray-800 mb-2">המשחק נגמר!</h2>
-            <p className="text-xl text-gray-600 mb-6 font-medium">
-              {scores[1] > scores[2] ? 'שחקן 1 ניצח!' : scores[2] > scores[1] ? 'שחקן 2 ניצח!' : 'תיקו!'}
-            </p>
-            <div className="flex justify-center gap-6 mb-6 text-lg">
-              <div className="text-center"><span className="block font-bold text-indigo-600">שחקן 1</span> {scores[1]} זוגות</div>
-              <div className="text-center"><span className="block font-bold text-purple-600">שחקן 2</span> {scores[2]} זוגות</div>
-            </div>
-            <button onClick={initializeGame} className="w-full mb-3 py-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-lg">
+            
+            {settings.players === 2 ? (
+              <>
+                <p className="text-xl text-gray-600 mb-6 font-medium">
+                  {scores[1] > scores[2] ? 'שחקן 1 ניצח!' : scores[2] > scores[1] ? 'שחקן 2 ניצח!' : 'תיקו!'}
+                </p>
+                <div className="flex justify-center gap-6 mb-6 text-lg">
+                  <div className="text-center"><span className="block font-bold text-indigo-600">שחקן 1</span> {scores[1]} זוגות</div>
+                  <div className="text-center"><span className="block font-bold text-purple-600">שחקן 2</span> {scores[2]} זוגות</div>
+                </div>
+              </>
+            ) : (
+              <p className="text-xl text-gray-600 mb-6 font-medium">
+                כל הכבוד! סיימת ב-<span className="font-bold text-indigo-600">{moves}</span> מהלכים.
+              </p>
+            )}
+
+            <button onClick={startGame} className="w-full mb-3 py-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-lg">
               שחק שוב
+            </button>
+            <button onClick={() => { setIsWon(false); setGameState('setup'); }} className="w-full mb-3 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl transition-colors active:scale-95">
+              שנה הגדרות
             </button>
             <button onClick={onBack} className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors active:scale-95">
               חזור לתפריט
@@ -244,7 +610,6 @@ function TicTacToe({ onBack }) {
 
   return (
     <div className="flex flex-col items-center w-full max-w-md mx-auto">
-      {/* כפתור חזרה */}
       <div className="w-full flex justify-start mb-4">
         <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-white/60 hover:bg-white rounded-xl shadow-sm transition-all text-indigo-800 font-semibold backdrop-blur-md">
           <span className="text-xl">⟵</span> חזור לתפריט
@@ -307,10 +672,432 @@ function TicTacToe({ onBack }) {
 }
 
 // ==========================================
+// רכיב גרפי לרכב במבט-על (Top-Down)
+// ==========================================
+const TopDownCar = ({ color, isPlayer = false }) => {
+  const colorMap = {
+    red: 'bg-red-500',
+    blue: 'bg-blue-500',
+    yellow: 'bg-yellow-400',
+    green: 'bg-emerald-500',
+    gray: 'bg-slate-500',
+    purple: 'bg-purple-500'
+  };
+  const bg = colorMap[color] || 'bg-red-500';
+
+  return (
+    <div className={`relative w-10 sm:w-12 h-20 sm:h-24 rounded-xl shadow-lg ${bg} border-2 border-black/40 overflow-hidden`}>
+      {/* שמשה קדמית */}
+      <div className="absolute top-4 sm:top-5 left-1 right-1 h-4 sm:h-5 bg-sky-900/90 rounded-t-sm sm:rounded-t-md border-t border-sky-400/30 shadow-inner"></div>
+      {/* שמשה אחורית */}
+      <div className="absolute bottom-3 sm:bottom-4 left-1 right-1 h-3 sm:h-4 bg-sky-900/90 rounded-b-sm sm:rounded-b-md border-b border-sky-400/30 shadow-inner"></div>
+      {/* גג הרכב */}
+      <div className="absolute top-8 sm:top-10 bottom-6 sm:bottom-8 left-1.5 right-1.5 bg-black/15 rounded-sm"></div>
+      
+      {/* פנסים קדמיים */}
+      <div className={`absolute top-0 left-1 w-2.5 h-1.5 ${isPlayer ? 'bg-yellow-100 shadow-[0_0_8px_4px_rgba(253,224,71,0.6)]' : 'bg-yellow-200'} rounded-b-sm`}></div>
+      <div className={`absolute top-0 right-1 w-2.5 h-1.5 ${isPlayer ? 'bg-yellow-100 shadow-[0_0_8px_4px_rgba(253,224,71,0.6)]' : 'bg-yellow-200'} rounded-b-sm`}></div>
+      
+      {/* פנסים אחוריים */}
+      <div className="absolute bottom-0 left-1 w-2.5 h-1.5 bg-red-600 rounded-t-sm shadow-[0_0_5px_red]"></div>
+      <div className="absolute bottom-0 right-1 w-2.5 h-1.5 bg-red-600 rounded-t-sm shadow-[0_0_5px_red]"></div>
+      
+      {/* מראות צד */}
+      <div className={`absolute top-5 -left-1 w-1 h-2.5 ${bg} rounded-l-sm border border-black/40`}></div>
+      <div className={`absolute top-5 -right-1 w-1 h-2.5 ${bg} rounded-r-sm border border-black/40`}></div>
+    </div>
+  );
+};
+
+// ==========================================
+// רכיב משחק מרוץ מכוניות (המשחק החדש)
+// ==========================================
+function CarRacingGame({ onBack }) {
+  const CAR_OPTIONS = ['red', 'blue', 'yellow', 'green', 'gray'];
+  
+  const [gameState, setGameState] = useState('setup'); // 'setup', 'playing', 'gameover'
+  const [selectedCar, setSelectedCar] = useState('red');
+  const [lives, setLives] = useState(3);
+  const [score, setScore] = useState(0);
+  
+  // אתחול שם שחקן מזיכרון המכשיר (localStorage)
+  const [playerName, setPlayerName] = useState(() => localStorage.getItem('racingPlayerName') || '');
+  
+  // אתחול שיאים מזיכרון המכשיר
+  const [highScores, setHighScores] = useState(() => {
+    const saved = localStorage.getItem('racingHighScores');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [obstacles, setObstacles] = useState([]);
+  
+  // טריק לרינדור מחדש עבור נתונים שנמצאים ב-refs
+  const [, setRenderTick] = useState(0);
+
+  // שימוש ב-refs כדי לנהל את הפיזיקה של המשחק מבלי לגרום לעיכובים (Lag)
+  const playerLane = useRef(1); // 0 (שמאל), 1 (אמצע), 2 (ימין)
+  const isInvulnerableUntil = useRef(0);
+  const scoreRef = useRef(0);
+  const animationRef = useRef(null);
+  const lastSpawnTime = useRef(0);
+  const currentRunId = useRef(null); // מזהה ייחודי לריצה הנוכחית (לסימון בטבלת השיאים)
+
+  const handleNameChange = (e) => {
+    setPlayerName(e.target.value);
+    localStorage.setItem('racingPlayerName', e.target.value); // שמירת השם למשחקים הבאים
+  };
+
+  const startGame = () => {
+    setLives(3);
+    setScore(0);
+    scoreRef.current = 0;
+    playerLane.current = 1;
+    setObstacles([]);
+    isInvulnerableUntil.current = 0;
+    lastSpawnTime.current = performance.now();
+    currentRunId.current = Date.now(); // שמירת מזהה הריצה
+    setGameState('playing');
+  };
+
+  const gameLoop = useCallback((timestamp) => {
+    if (gameState !== 'playing') return;
+
+    scoreRef.current += 0.016; // בערך שנייה אחת של זמן משחק
+    setScore(scoreRef.current);
+
+    setObstacles(prev => {
+      // עדכון מיקומי הרכבים האחרים בכביש
+      let newObstacles = prev.map(obs => ({
+        ...obs,
+        y: obs.y + obs.speed
+      })).filter(obs => obs.y < 120); // מחיקת רכבים שעברו את המסך
+
+      // חישוב קושי נוכחי לפי הזמן ששרדנו
+      const currentDifficulty = Math.min(scoreRef.current / 15, 4);
+      // ככל שהקושי עולה, זמן ההמתנה בין יצירת רכבים יורד
+      const spawnCooldown = Math.max(2000 - currentDifficulty * 300, 800);
+
+      if (timestamp - lastSpawnTime.current > spawnCooldown) {
+        // יצירת 1 או 2 רכבים. מניעת מצב שבו שני רכבים צמודים נוצרים באותו הזמן.
+        const numCars = Math.random() > 0.8 ? 2 : 1;
+        let lanesToSpawn = [];
+        
+        if (numCars === 2) {
+          // אם יש שני רכבים, הם ייווצרו תמיד בנתיב 0 ו-2 (הצדדים) כדי לא להיות צמודים
+          lanesToSpawn = [0, 2];
+        } else {
+          // אם יש רכב אחד, הוא ייווצר בנתיב אקראי
+          lanesToSpawn = [[0, 1, 2][Math.floor(Math.random() * 3)]];
+        }
+        
+        lanesToSpawn.forEach(lane => {
+          newObstacles.push({
+            id: Math.random().toString(),
+            lane,
+            y: -20,
+            speed: 0.3 + Math.random() * 0.4 + (currentDifficulty * 0.15),
+            color: ['red', 'blue', 'yellow', 'green', 'gray', 'purple'][Math.floor(Math.random() * 6)]
+          });
+        });
+        lastSpawnTime.current = timestamp;
+      }
+
+      // בדיקת התנגשויות (רק אם אין חסינות כרגע)
+      if (timestamp > isInvulnerableUntil.current) {
+        const hit = newObstacles.some(obs => {
+           // הרכב שלנו הועלה קצת למעלה, ולכן טווח ההתנגשות השתנה (בערך בין 55% ל-80%)
+           return obs.lane === playerLane.current && obs.y > 55 && obs.y < 80;
+        });
+
+        if (hit) {
+          setLives(l => {
+            const newLives = l - 1;
+            if (newLives <= 0) setGameState('gameover');
+            return newLives;
+          });
+          
+          if (gameState !== 'gameover') {
+              // חסינות לשנייה וחצי והחזרה לאמצע
+              isInvulnerableUntil.current = timestamp + 1500;
+              playerLane.current = 1;
+          }
+        }
+      }
+
+      return newObstacles;
+    });
+
+    if (gameState === 'playing') {
+      animationRef.current = requestAnimationFrame(gameLoop);
+    }
+  }, [gameState]);
+
+  // הפעלת לולאת המשחק
+  useEffect(() => {
+    if (gameState === 'playing') {
+      animationRef.current = requestAnimationFrame(gameLoop);
+    }
+    return () => cancelAnimationFrame(animationRef.current);
+  }, [gameState, gameLoop]);
+
+  // עדכון ושמירת טבלת שיאים כשנגמר המשחק
+  useEffect(() => {
+    if (gameState === 'gameover') {
+       setHighScores(prev => {
+         const currentScore = parseFloat(scoreRef.current.toFixed(1));
+         
+         // יצירת אובייקט שיא חדש עם שם השחקן
+         const newEntry = { 
+           id: currentRunId.current, 
+           name: playerName.trim() || 'שחקן אנונימי', 
+           score: currentScore 
+         };
+         
+         const newScores = [...prev, newEntry]
+           .sort((a, b) => b.score - a.score)
+           .slice(0, 5); // שומר את 5 השיאים הטובים ביותר
+         
+         // שמירה לזיכרון המכשיר (localStorage)
+         localStorage.setItem('racingHighScores', JSON.stringify(newScores));
+         
+         return newScores;
+       });
+    }
+  }, [gameState, playerName]);
+
+  // ניהול שליטה במקלדת
+  const moveLeft = useCallback(() => { if (playerLane.current > 0) playerLane.current -= 1; }, []);
+  const moveRight = useCallback(() => { if (playerLane.current < 2) playerLane.current += 1; }, []);
+  
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (gameState !== 'playing') return;
+      if (e.key === 'ArrowLeft') moveLeft();
+      if (e.key === 'ArrowRight') moveRight();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [gameState, moveLeft, moveRight]);
+
+  // רינדור מחזורי מזורז לעדכון חלק של המכונית שלנו (כי היא מנוהלת דרך Ref)
+  useEffect(() => {
+     let interval;
+     if (gameState === 'playing') {
+         interval = setInterval(() => setRenderTick(t => t + 1), 30);
+     }
+     return () => clearInterval(interval);
+  }, [gameState]);
+
+  // האם הרכב שלנו מהבהב כרגע (חסינות)
+  const isBlinking = gameState === 'playing' && performance.now() < isInvulnerableUntil.current;
+
+  // פונקצית עזר לחישוב אחוזים בתצוגה לפי נתיב
+  const getLanePosition = (laneIndex) => {
+    if (laneIndex === 0) return '16.6%';
+    if (laneIndex === 1) return '50%';
+    return '83.3%';
+  };
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-lg mx-auto">
+      <div className="w-full flex justify-start mb-4">
+        <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-white/60 hover:bg-white rounded-xl shadow-sm transition-all text-indigo-800 font-semibold backdrop-blur-md">
+          <span className="text-xl">⟵</span> חזור לתפריט
+        </button>
+      </div>
+
+      <div className="text-center mb-6 w-full">
+        <h1 className="text-4xl md:text-5xl font-extrabold text-slate-800 mb-2 tracking-tight drop-shadow-sm">
+          הישרדות בכביש
+        </h1>
+      </div>
+
+      {gameState === 'setup' && (
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 shadow-xl border border-white/50 w-full animate-bounce-in">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">הגדרות המרוץ</h2>
+          
+          <div className="mb-6">
+            <label className="block text-gray-700 font-semibold mb-2">שם השחקן</label>
+            <input
+              type="text"
+              value={playerName}
+              onChange={handleNameChange}
+              placeholder="הכנס את שמך..."
+              maxLength="15"
+              className="w-full p-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white/70 backdrop-blur-sm transition-all"
+            />
+          </div>
+
+          <label className="block text-gray-700 font-semibold mb-2">בחר צבע רכב</label>
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
+            {CAR_OPTIONS.map(car => (
+              <button
+                key={car}
+                onClick={() => setSelectedCar(car)}
+                className={`p-2 rounded-2xl transition-all ${selectedCar === car ? 'bg-indigo-50 ring-4 ring-indigo-400 scale-110' : 'hover:bg-gray-100 opacity-70 hover:opacity-100'}`}
+              >
+                <div className="transform scale-90 origin-center pointer-events-none">
+                  <TopDownCar color={car} />
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {highScores.length > 0 && (
+            <div className="mb-8 bg-slate-50 rounded-xl p-4 border border-slate-200">
+              <h3 className="text-lg font-bold text-slate-700 mb-2 flex items-center justify-center gap-2">
+                <span>🏆</span> טבלת שיאים
+              </h3>
+              <div className="flex flex-col gap-1">
+                {highScores.map((s, i) => (
+                  <div key={i} className="flex justify-between items-center text-slate-600 font-medium">
+                    <span className="truncate max-w-[150px]">{i + 1}. {s.name}</span>
+                    <span className="font-bold text-indigo-600">{s.score.toFixed(1)} שניות</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button 
+            onClick={startGame}
+            className="w-full py-4 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-xl"
+          >
+            התחל מרוץ!
+          </button>
+        </div>
+      )}
+
+      {gameState === 'playing' && (
+        <div className="w-full bg-white/60 backdrop-blur-md rounded-3xl p-4 shadow-xl border border-white/50 flex flex-col gap-4">
+          
+          {/* סרגל עליון: חיים וניקוד */}
+          <div className="flex justify-between items-center bg-slate-800 text-white rounded-xl p-3 shadow-inner">
+            <div className="flex gap-1 text-2xl">
+              {[...Array(3)].map((_, i) => (
+                <span key={i} className={i < lives ? 'opacity-100' : 'opacity-20 grayscale'}>❤️</span>
+              ))}
+            </div>
+            <div className="text-xl font-mono font-bold tracking-wider">
+              {score.toFixed(1)}s
+            </div>
+          </div>
+
+          {/* אזור הכביש (המשחק) - הפך לצר וארוך יותר */}
+          <div className="relative w-full max-w-sm mx-auto aspect-[1/2] sm:aspect-[9/16] bg-slate-700 rounded-xl overflow-hidden border-4 border-slate-800 shadow-inner">
+            
+            {/* פסי הפרדה זזים (אנימציה) */}
+            <div className="absolute top-0 bottom-0 left-1/3 w-2 border-l-4 border-dashed border-white/50 animate-road-lines" style={{ animationDuration: '0.4s' }}></div>
+            <div className="absolute top-0 bottom-0 left-2/3 w-2 border-l-4 border-dashed border-white/50 animate-road-lines" style={{ animationDuration: '0.4s' }}></div>
+
+            {/* סטיילים לאנימציית הכביש */}
+            <style dangerouslySetInnerHTML={{__html: `
+              @keyframes road-lines {
+                from { background-position: 0 0; }
+                to { background-position: 0 100px; }
+              }
+              .animate-road-lines {
+                background-image: linear-gradient(to bottom, transparent 50%, rgba(255,255,255,0.5) 50%);
+                background-size: 100% 40px;
+                animation-name: road-lines;
+                animation-timing-function: linear;
+                animation-iteration-count: infinite;
+              }
+            `}} />
+
+            {/* הרכב של השחקן - מוקם ב-20% מלמטה במקום ממש בתחתית */}
+            <div 
+              className={`absolute bottom-[20%] transition-all duration-150 transform -translate-x-1/2 z-20
+                ${isBlinking ? 'opacity-50' : 'opacity-100'}
+              `}
+              style={{ left: getLanePosition(playerLane.current) }}
+            >
+              <TopDownCar color={selectedCar} isPlayer={true} />
+            </div>
+
+            {/* מכשולים (רכבים אחרים) - בוטל הסיבוב כדי שיפנו לאותו הכיוון כמו השחקן */}
+            {obstacles.map(obs => (
+              <div 
+                key={obs.id}
+                className="absolute transform -translate-x-1/2 z-10"
+                style={{ left: getLanePosition(obs.lane), top: `${obs.y}%` }}
+              >
+                <TopDownCar color={obs.color} isPlayer={false} />
+              </div>
+            ))}
+          </div>
+
+          {/* כפתורי שליטה (לניידים ולמסכי מגע) - מוגדר כ-ltr כדי שהשמאל יהיה בצד שמאל */}
+          <div className="flex justify-between gap-4 mt-2" dir="ltr">
+            <button 
+              onClick={moveLeft}
+              className="flex-1 bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-800 font-black text-2xl sm:text-3xl py-5 rounded-xl shadow active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <span className="text-xl">&larr;</span> <span>שמאלה</span>
+            </button>
+            <button 
+              onClick={moveRight}
+              className="flex-1 bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-800 font-black text-2xl sm:text-3xl py-5 rounded-xl shadow active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <span>ימינה</span> <span className="text-xl">&rarr;</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'gameover' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-bounce-in z-50 border-4 border-slate-800">
+            <div className="text-6xl mb-4">💥</div>
+            <h2 className="text-3xl font-black text-slate-800 mb-2">תאונה!</h2>
+            <p className="text-xl text-slate-600 mb-6 font-medium">
+              הצלחת לשרוד: <span className="font-black text-indigo-600 text-2xl">{score.toFixed(1)}</span> שניות
+            </p>
+            
+            {/* טבלת השיאים נוספה למסך הסיום עם הדגשת השיא הנוכחי */}
+            {highScores.length > 0 && (
+              <div className="mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200">
+                <h3 className="text-lg font-bold text-slate-700 mb-2 flex items-center justify-center gap-2">
+                  <span>🏆</span> טבלת שיאים
+                </h3>
+                <div className="flex flex-col gap-1">
+                  {highScores.map((s, i) => {
+                    // בדיקה אם זה השיא מהריצה שרק עכשיו הסתיימה
+                    const isCurrentScore = s.id === currentRunId.current;
+                    return (
+                      <div key={i} className={`flex justify-between items-center text-slate-600 font-medium ${isCurrentScore ? 'bg-indigo-100 text-indigo-800 font-bold px-2 rounded-lg py-1' : ''}`}>
+                        <span className="truncate max-w-[120px]" title={s.name}>{i + 1}. {s.name}</span>
+                        <span className="font-bold whitespace-nowrap">{s.score.toFixed(1)} שניות</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <button onClick={startGame} className="w-full mb-3 py-4 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-lg">
+              נסה שוב
+            </button>
+            <button onClick={() => setGameState('setup')} className="w-full mb-3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors active:scale-95">
+              הגדרות (החלפת רכב/שם)
+            </button>
+            <button onClick={onBack} className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors active:scale-95">
+              חזור לתפריט
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
 // אפליקציה ראשית (תפריט וניהול מצב)
 // ==========================================
 export default function App() {
-  // מצב ששומר איזה משחק פעיל עכשיו: null (תפריט), 'memory', או 'tictactoe'
+  // מצב ששומר איזה משחק פעיל עכשיו: null (תפריט), 'memory', 'tictactoe', 'numbers' או 'racing'
   const [activeGame, setActiveGame] = useState(null);
 
   return (
@@ -331,7 +1118,7 @@ export default function App() {
       `}} />
 
       {activeGame === null && (
-        <div className="max-w-3xl mx-auto flex flex-col items-center pt-10">
+        <div className="max-w-4xl mx-auto flex flex-col items-center pt-10">
           <div className="text-center mb-12 animate-bounce-in">
             <h1 className="text-5xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 mb-4 drop-shadow-sm">
               מרכז המשחקים
@@ -339,29 +1126,53 @@ export default function App() {
             <p className="text-xl text-gray-600 font-medium">בחר משחק כדי להתחיל</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full px-4">
+            {/* קוביית משחק: התאמת כמויות */}
+            <button 
+              onClick={() => setActiveGame('numbers')}
+              className="group aspect-square bg-white/80 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col items-center justify-center border-2 border-transparent hover:border-blue-200"
+            >
+              <div className="text-7xl mb-4 transform group-hover:scale-110 transition-transform duration-300">
+                🔢⭐
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800">התאמת כמויות</h2>
+              <p className="text-gray-500 mt-2 font-medium">התאם צורה למספר</p>
+            </button>
+
             {/* קוביית משחק: איקס עיגול */}
             <button 
               onClick={() => setActiveGame('tictactoe')}
-              className="group aspect-square sm:aspect-auto sm:h-64 bg-white/80 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col items-center justify-center border-2 border-transparent hover:border-indigo-200"
+              className="group aspect-square bg-white/80 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col items-center justify-center border-2 border-transparent hover:border-indigo-200"
             >
-              <div className="text-7xl mb-6 transform group-hover:scale-110 transition-transform duration-300">
+              <div className="text-7xl mb-4 transform group-hover:scale-110 transition-transform duration-300">
                 ❌⭕
               </div>
-              <h2 className="text-3xl font-bold text-gray-800">איקס עיגול</h2>
+              <h2 className="text-2xl font-bold text-gray-800">איקס עיגול</h2>
               <p className="text-gray-500 mt-2 font-medium">הקלאסיקה לשני שחקנים</p>
             </button>
 
             {/* קוביית משחק: זיכרון */}
             <button 
               onClick={() => setActiveGame('memory')}
-              className="group aspect-square sm:aspect-auto sm:h-64 bg-white/80 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col items-center justify-center border-2 border-transparent hover:border-purple-200"
+              className="group aspect-square bg-white/80 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col items-center justify-center border-2 border-transparent hover:border-purple-200"
             >
-              <div className="text-7xl mb-6 transform group-hover:scale-110 transition-transform duration-300">
+              <div className="text-7xl mb-4 transform group-hover:scale-110 transition-transform duration-300">
                 🃏🧠
               </div>
-              <h2 className="text-3xl font-bold text-gray-800">משחק זיכרון</h2>
+              <h2 className="text-2xl font-bold text-gray-800">משחק זיכרון</h2>
               <p className="text-gray-500 mt-2 font-medium">מצא את כל 5 הזוגות</p>
+            </button>
+
+            {/* קוביית משחק: מרוץ מכוניות */}
+            <button 
+              onClick={() => setActiveGame('racing')}
+              className="group aspect-square bg-white/80 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col items-center justify-center border-2 border-transparent hover:border-slate-400"
+            >
+              <div className="text-7xl mb-4 transform group-hover:scale-110 transition-transform duration-300">
+                🏎️💨
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800">הישרדות בכביש</h2>
+              <p className="text-gray-500 mt-2 font-medium">התחמק מהתנועה!</p>
             </button>
           </div>
         </div>
@@ -370,6 +1181,8 @@ export default function App() {
       {/* רינדור המשחק הנבחר */}
       {activeGame === 'memory' && <MemoryGame onBack={() => setActiveGame(null)} />}
       {activeGame === 'tictactoe' && <TicTacToe onBack={() => setActiveGame(null)} />}
+      {activeGame === 'numbers' && <NumbersGame onBack={() => setActiveGame(null)} />}
+      {activeGame === 'racing' && <CarRacingGame onBack={() => setActiveGame(null)} />}
 
     </div>
   );
