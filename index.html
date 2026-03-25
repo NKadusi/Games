@@ -121,12 +121,12 @@
         <div class="bg-white/60 backdrop-blur-md rounded-3xl p-4 sm:p-6 shadow-xl border border-white/50 w-full flex flex-col gap-8">
             <div>
                 <h2 class="text-xl font-bold text-gray-700 mb-3 text-center">מספרים (גררו לכאן)</h2>
-                <div id="numbers-targets" dir="ltr" class="grid grid-cols-5 md:grid-cols-10 gap-2 sm:gap-3"></div>
+                <div id="numbers-targets" dir="ltr" class="grid grid-cols-5 md:grid-cols-10 gap-1 sm:gap-3"></div>
             </div>
             <div class="w-full h-px bg-indigo-100 rounded-full"></div>
             <div>
                 <h2 class="text-xl font-bold text-gray-700 mb-3 text-center">צורות (גררו מכאן)</h2>
-                <div id="numbers-sources" dir="ltr" class="grid grid-cols-5 md:grid-cols-10 gap-2 sm:gap-3"></div>
+                <div id="numbers-sources" dir="ltr" class="grid grid-cols-5 md:grid-cols-10 gap-1 sm:gap-3"></div>
             </div>
         </div>
         <div id="numbers-win-modal" class="view-hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -617,13 +617,19 @@
             renderShapes(count) {
                 const emoji = this.numberEmojis[count] || '⭐';
                 
-                // גודל דינמי לפי כמות הצורות כדי למנוע גלישה מחוץ לקלף
-                let sizeClass = 'text-4xl sm:text-5xl';
-                if (count >= 2 && count <= 4) sizeClass = 'text-2xl sm:text-3xl';
-                if (count >= 5 && count <= 7) sizeClass = 'text-base sm:text-xl md:text-2xl';
-                if (count >= 8) sizeClass = 'text-xs sm:text-base md:text-lg';
+                // שימוש ברשת פנימית מסודרת כדי למנוע גלישה, והגדלה משמעותית של האימוג'ים
+                let cols = 1;
+                let gridClass = 'grid-cols-1';
+                let sizeClass = 'text-4xl sm:text-6xl';
                 
-                return Array(count).fill(`<span class="${sizeClass} drop-shadow-sm leading-[1.1] m-0 p-0">${emoji}</span>`).join('');
+                if (count >= 2 && count <= 4) { cols = 2; gridClass = 'grid-cols-2'; sizeClass = 'text-2xl sm:text-4xl'; }
+                else if (count >= 5 && count <= 6) { cols = 2; gridClass = 'grid-cols-2'; sizeClass = 'text-xl sm:text-3xl'; }
+                else if (count >= 7 && count <= 9) { cols = 3; gridClass = 'grid-cols-3'; sizeClass = 'text-lg sm:text-2xl'; }
+                else if (count === 10) { cols = 2; gridClass = 'grid-cols-2'; sizeClass = 'text-base sm:text-2xl'; }
+                
+                const items = Array(count).fill(`<div class="flex items-center justify-center leading-none ${sizeClass} drop-shadow-sm">${emoji}</div>`).join('');
+                
+                return `<div class="grid ${gridClass} w-full h-full p-0.5 sm:p-2 gap-0 place-content-center place-items-center">${items}</div>`;
             },
 
             render() {
@@ -640,7 +646,7 @@
                     div.ondragover = e => e.preventDefault();
                     div.ondrop = e => this.handleDrop(e, num);
                     div.onclick = () => this.handleClick(num, false);
-                    div.className = `aspect-[3/4] rounded-2xl flex items-center justify-center text-3xl sm:text-4xl md:text-5xl font-black transition-all duration-300
+                    div.className = `aspect-[2/3] sm:aspect-[3/4] rounded-xl sm:rounded-2xl flex items-center justify-center text-4xl sm:text-5xl md:text-6xl font-black transition-all duration-300
                         ${isMatched ? 'neon-glow z-10 scale-105' : 'bg-white border-2 border-dashed border-gray-300 text-gray-400 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer shadow-sm'}`;
                     div.innerText = num;
                     targetsEl.appendChild(div);
@@ -650,7 +656,7 @@
                 this.shuffledShapes.forEach((shapeQty, i) => {
                     if (this.matchedNumbers.includes(shapeQty)) {
                         const empty = document.createElement('div');
-                        empty.className = 'aspect-[3/4] bg-transparent';
+                        empty.className = 'aspect-[2/3] sm:aspect-[3/4] bg-transparent';
                         sourcesEl.appendChild(empty);
                         return;
                     }
@@ -666,8 +672,8 @@
                     
                     div.onclick = () => this.handleClick(shapeQty, true);
                     
-                    // הוקטנו המרווחים (gap-0) והריפוד כדי לפנות יותר מקום לצורות בפנים
-                    div.className = `aspect-[3/4] bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl border-2 shadow-md cursor-grab active:cursor-grabbing hover:shadow-lg transition-transform hover:-translate-y-1 overflow-hidden flex flex-wrap justify-center items-center content-center gap-0 p-1 sm:p-1.5
+                    // עיצוב הקלף שופר למניעת גלישה - הקלפים גבוהים יותר במובייל
+                    div.className = `aspect-[2/3] sm:aspect-[3/4] bg-gradient-to-br from-yellow-50 to-orange-100 rounded-xl sm:rounded-2xl border-2 shadow-md cursor-grab active:cursor-grabbing hover:shadow-lg transition-transform hover:-translate-y-1 overflow-hidden p-0 sm:p-1
                         ${isSelected ? 'border-orange-500 ring-4 ring-orange-200 scale-105' : 'border-orange-200'}`;
                     
                     div.innerHTML = this.renderShapes(shapeQty);
