@@ -616,8 +616,14 @@
 
             renderShapes(count) {
                 const emoji = this.numberEmojis[count] || '⭐';
-                // הותאם למסכים קטנים (text-lg במובייל)
-                return Array(count).fill(`<span class="text-lg sm:text-xl md:text-2xl drop-shadow-sm leading-none">${emoji}</span>`).join('');
+                
+                // גודל דינמי לפי כמות הצורות כדי למנוע גלישה מחוץ לקלף
+                let sizeClass = 'text-4xl sm:text-5xl';
+                if (count >= 2 && count <= 4) sizeClass = 'text-2xl sm:text-3xl';
+                if (count >= 5 && count <= 7) sizeClass = 'text-base sm:text-xl md:text-2xl';
+                if (count >= 8) sizeClass = 'text-xs sm:text-base md:text-lg';
+                
+                return Array(count).fill(`<span class="${sizeClass} drop-shadow-sm leading-[1.1] m-0 p-0">${emoji}</span>`).join('');
             },
 
             render() {
@@ -659,8 +665,11 @@
                     div.ontouchend = e => this.handleTouchEnd(e, shapeQty);
                     
                     div.onclick = () => this.handleClick(shapeQty, true);
-                    div.className = `aspect-[3/4] bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl border-2 shadow-md cursor-grab active:cursor-grabbing hover:shadow-lg transition-transform hover:-translate-y-1 overflow-hidden flex flex-wrap justify-center items-center content-center gap-0.5 sm:gap-1 p-1 sm:p-2
+                    
+                    // הוקטנו המרווחים (gap-0) והריפוד כדי לפנות יותר מקום לצורות בפנים
+                    div.className = `aspect-[3/4] bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl border-2 shadow-md cursor-grab active:cursor-grabbing hover:shadow-lg transition-transform hover:-translate-y-1 overflow-hidden flex flex-wrap justify-center items-center content-center gap-0 p-1 sm:p-1.5
                         ${isSelected ? 'border-orange-500 ring-4 ring-orange-200 scale-105' : 'border-orange-200'}`;
+                    
                     div.innerHTML = this.renderShapes(shapeQty);
                     sourcesEl.appendChild(div);
                 });
