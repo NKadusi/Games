@@ -1100,6 +1100,43 @@ export default function App() {
   // מצב ששומר איזה משחק פעיל עכשיו: null (תפריט), 'memory', 'tictactoe', 'numbers' או 'racing'
   const [activeGame, setActiveGame] = useState(null);
 
+  // ==========================================
+  // --- הוספת מנגנון מעקב Google Analytics ---
+  // ==========================================
+  useEffect(() => {
+    // !! חשוב: החלף את המחרוזת הזו ב-Measurement ID האמיתי שלך מ-Google Analytics !!
+    const GA_MEASUREMENT_ID = 'G-C6H5YNZBJS'; 
+
+    if (GA_MEASUREMENT_ID !== 'G-C6H5YNZBJS' && !window.gtag) {
+      // טעינת הסקריפט של גוגל למסמך הראשי
+      const script = document.createElement('script');
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`;
+      script.async = true;
+      document.head.appendChild(script);
+
+      // אתחול האובייקטים וההגדרות
+      const inlineScript = document.createElement('script');
+      inlineScript.innerHTML = `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', '${GA_MEASUREMENT_ID}');
+      `;
+      document.head.appendChild(inlineScript);
+    }
+  }, []);
+
+  // דיווח אוטומטי לגוגל אנליטיקס בכל פעם ששחקן בוחר משחק
+  useEffect(() => {
+    if (window.gtag && activeGame) {
+      window.gtag('event', 'select_content', {
+        content_type: 'game',
+        item_id: activeGame
+      });
+    }
+  }, [activeGame]);
+  // ==========================================
+
   return (
     <div dir="rtl" className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 font-sans p-4 sm:p-8">
       
