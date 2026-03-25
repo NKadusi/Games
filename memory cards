@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
-// רשימת האמוג'ים שיופיעו על הקלפים (צומצם ל-5 זוגות)
+// ==========================================
+// עזרים ונתונים גלובליים
+// ==========================================
 const EMOJIS = ['🍎', '🍌', '🍉', '🍇', '🍓'];
 
-// פונקציה לערבוב מערך (אלגוריתם Fisher-Yates)
 const shuffleArray = (array) => {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -13,19 +14,18 @@ const shuffleArray = (array) => {
   return shuffled;
 };
 
-export default function App() {
+// ==========================================
+// רכיב משחק זיכרון
+// ==========================================
+function MemoryGame({ onBack }) {
   const [cards, setCards] = useState([]);
   const [flippedIndices, setFlippedIndices] = useState([]);
   const [matchedPairs, setMatchedPairs] = useState(0);
-  
-  // משתני מצב חדשים עבור 2 שחקנים
   const [scores, setScores] = useState({ 1: 0, 2: 0 });
   const [currentPlayer, setCurrentPlayer] = useState(1);
-  
   const [isLocked, setIsLocked] = useState(false);
   const [isWon, setIsWon] = useState(false);
 
-  // אתחול המשחק
   const initializeGame = () => {
     const duplicatedEmojis = [...EMOJIS, ...EMOJIS];
     const shuffledCards = shuffleArray(duplicatedEmojis).map((emoji, index) => ({
@@ -44,24 +44,19 @@ export default function App() {
     setIsLocked(false);
   };
 
-  // מופעל פעם אחת כשהרכיב נטען
   useEffect(() => {
     initializeGame();
   }, []);
 
-  // בדיקת ניצחון
   useEffect(() => {
     if (matchedPairs === EMOJIS.length && EMOJIS.length > 0) {
       setTimeout(() => setIsWon(true), 500);
     }
   }, [matchedPairs]);
 
-  // טיפול בלחיצה על קלף
   const handleCardClick = (index) => {
-    // מניעת לחיצה אם הלוח נעול, הקלף כבר הפוך או כבר הותאם
     if (isLocked || cards[index].isFlipped || cards[index].isMatched) return;
 
-    // הפוך את הקלף הנבחר
     const newCards = [...cards];
     newCards[index].isFlipped = true;
     setCards(newCards);
@@ -69,14 +64,11 @@ export default function App() {
     const newFlippedIndices = [...flippedIndices, index];
     setFlippedIndices(newFlippedIndices);
 
-    // אם שני קלפים נהפכו, בדוק התאמה
     if (newFlippedIndices.length === 2) {
       setIsLocked(true);
-
       const [firstIndex, secondIndex] = newFlippedIndices;
 
       if (cards[firstIndex].emoji === cards[secondIndex].emoji) {
-        // יש התאמה! השחקן מקבל נקודה ושומר על התור שלו
         setTimeout(() => {
           const matchedCards = [...cards];
           matchedCards[firstIndex].isMatched = true;
@@ -88,7 +80,6 @@ export default function App() {
           setIsLocked(false);
         }, 500);
       } else {
-        // אין התאמה - הפוך חזרה אחרי השהייה קלה והעבר תור לשחקן השני
         setTimeout(() => {
           const resetCards = [...cards];
           resetCards[firstIndex].isFlipped = false;
@@ -103,109 +94,283 @@ export default function App() {
   };
 
   return (
-    <div dir="rtl" className="min-h-screen bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 py-10 px-4 flex flex-col items-center font-sans">
+    <div className="flex flex-col items-center w-full max-w-xl mx-auto">
+      {/* כפתור חזרה */}
+      <div className="w-full flex justify-start mb-4">
+        <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-white/60 hover:bg-white rounded-xl shadow-sm transition-all text-indigo-800 font-semibold backdrop-blur-md">
+          <span className="text-xl">⟵</span> חזור לתפריט
+        </button>
+      </div>
+
+      <div className="text-center mb-6 w-full">
+        <h1 className="text-4xl md:text-5xl font-extrabold text-indigo-900 mb-4 tracking-tight drop-shadow-sm">
+          משחק זיכרון
+        </h1>
+        
+        <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 shadow-sm border border-white/50">
+          <div className="flex justify-between items-center mb-4">
+            <div className={`p-3 rounded-xl transition-all ${currentPlayer === 1 ? 'bg-indigo-500 text-white shadow-md scale-105' : 'bg-transparent text-indigo-800'}`}>
+              <p className="font-bold text-lg">שחקן 1</p>
+              <p className="text-2xl text-center">{scores[1]}</p>
+            </div>
+            
+            <div className="text-center px-2">
+              <p className="text-sm font-semibold text-gray-500 mb-1">תור עכשיו</p>
+              <div className="text-xl font-black text-indigo-700 bg-indigo-100 px-4 py-1 rounded-full shadow-sm border border-indigo-200">
+                שחקן {currentPlayer}
+              </div>
+            </div>
+
+            <div className={`p-3 rounded-xl transition-all ${currentPlayer === 2 ? 'bg-purple-500 text-white shadow-md scale-105' : 'bg-transparent text-purple-800'}`}>
+              <p className="font-bold text-lg">שחקן 2</p>
+              <p className="text-2xl text-center">{scores[2]}</p>
+            </div>
+          </div>
+          
+          <button onClick={initializeGame} className="w-full py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-medium rounded-xl transition-colors active:scale-95">
+            התחל משחק חדש
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-5 gap-2 sm:gap-3 md:gap-4 perspective-1000 w-full">
+        {cards.map((card, index) => (
+          <div key={card.id} className="relative w-full aspect-[3/4] cursor-pointer group perspective-1000" onClick={() => handleCardClick(index)}>
+            <div className={`w-full h-full transition-transform duration-500 transform-style-3d relative rounded-2xl shadow-md
+                ${(card.isFlipped || card.isMatched) ? 'rotate-y-180' : ''}
+                ${card.isMatched ? 'opacity-70' : ''}`}>
+              <div className="absolute inset-0 backface-hidden bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center border-2 border-indigo-300/30 group-hover:shadow-lg transition-shadow">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-white/30 rounded-full flex items-center justify-center">
+                  <span className="text-white/50 text-lg sm:text-xl font-bold">?</span>
+                </div>
+              </div>
+              <div className="absolute inset-0 backface-hidden rotate-y-180 bg-white rounded-2xl flex items-center justify-center text-4xl sm:text-5xl border-2 border-purple-200">
+                {card.emoji}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isWon && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-bounce-in">
+            <div className="text-6xl mb-4">🏆</div>
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">המשחק נגמר!</h2>
+            <p className="text-xl text-gray-600 mb-6 font-medium">
+              {scores[1] > scores[2] ? 'שחקן 1 ניצח!' : scores[2] > scores[1] ? 'שחקן 2 ניצח!' : 'תיקו!'}
+            </p>
+            <div className="flex justify-center gap-6 mb-6 text-lg">
+              <div className="text-center"><span className="block font-bold text-indigo-600">שחקן 1</span> {scores[1]} זוגות</div>
+              <div className="text-center"><span className="block font-bold text-purple-600">שחקן 2</span> {scores[2]} זוגות</div>
+            </div>
+            <button onClick={initializeGame} className="w-full mb-3 py-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-lg">
+              שחק שוב
+            </button>
+            <button onClick={onBack} className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors active:scale-95">
+              חזור לתפריט
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// רכיב איקס עיגול
+// ==========================================
+function TicTacToe({ onBack }) {
+  const [board, setBoard] = useState(Array(9).fill(null));
+  const [xIsNext, setXIsNext] = useState(true);
+  const [scores, setScores] = useState({ X: 0, O: 0 });
+
+  const calculateWinner = (squares) => {
+    const lines = [
+      [0, 1, 2], [3, 4, 5], [6, 7, 8],
+      [0, 3, 6], [1, 4, 7], [2, 5, 8],
+      [0, 4, 8], [2, 4, 6]
+    ];
+    for (let i = 0; i < lines.length; i++) {
+      const [a, b, c] = lines[i];
+      if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
+        return { winner: squares[a], line: lines[i] };
+      }
+    }
+    if (!squares.includes(null)) return { winner: 'Draw', line: [] };
+    return null;
+  };
+
+  const winInfo = calculateWinner(board);
+  const winner = winInfo?.winner;
+  const winningLine = winInfo?.line || [];
+
+  const handleClick = (index) => {
+    if (winner || board[index]) return;
+    const newBoard = [...board];
+    newBoard[index] = xIsNext ? 'X' : 'O';
+    setBoard(newBoard);
+    
+    const newWinInfo = calculateWinner(newBoard);
+    if (newWinInfo && newWinInfo.winner !== 'Draw') {
+      setScores(prev => ({ ...prev, [newWinInfo.winner]: prev[newWinInfo.winner] + 1 }));
+    } else {
+      setXIsNext(!xIsNext);
+    }
+  };
+
+  const resetGame = () => { setBoard(Array(9).fill(null)); setXIsNext(true); };
+  const fullReset = () => { setBoard(Array(9).fill(null)); setXIsNext(true); setScores({ X: 0, O: 0 }); };
+
+  const renderSquare = (index) => {
+    const isWinningSquare = winningLine.includes(index);
+    const value = board[index];
+    
+    return (
+      <button
+        key={index}
+        className={`h-24 sm:h-32 w-full text-5xl sm:text-6xl font-black rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm
+          ${!value && !winner ? 'hover:bg-indigo-50 active:bg-indigo-100 bg-white cursor-pointer' : 'bg-white cursor-default'}
+          ${isWinningSquare ? 'bg-green-100 ring-4 ring-green-400 scale-105 z-10' : 'border-2 border-indigo-100'}
+          ${value === 'X' ? 'text-indigo-600' : 'text-rose-500'}
+        `}
+        onClick={() => handleClick(index)}
+        disabled={!!winner || !!value}
+      >
+        <span className={value ? 'animate-bounce-in' : ''}>{value}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-md mx-auto">
+      {/* כפתור חזרה */}
+      <div className="w-full flex justify-start mb-4">
+        <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-white/60 hover:bg-white rounded-xl shadow-sm transition-all text-indigo-800 font-semibold backdrop-blur-md">
+          <span className="text-xl">⟵</span> חזור לתפריט
+        </button>
+      </div>
+
+      <div className="text-center mb-6 w-full">
+        <h1 className="text-5xl font-extrabold text-indigo-900 mb-2 tracking-tight">איקס עיגול</h1>
+      </div>
+
+      <div className="bg-white rounded-3xl p-6 shadow-xl shadow-indigo-100/50 mb-8 border border-white w-full">
+        <div className="flex justify-between items-center mb-6">
+          <div className={`flex flex-col items-center p-3 rounded-2xl transition-all w-24 ${xIsNext && !winner ? 'bg-indigo-50 ring-2 ring-indigo-200 scale-110 shadow-md' : 'opacity-70'}`}>
+            <span className="text-3xl font-black text-indigo-600">X</span>
+            <span className="text-xl font-bold text-gray-700 mt-1">{scores.X}</span>
+          </div>
+
+          <div className="text-center flex-1 px-4">
+            {winner ? (
+              <div className="animate-bounce-in">
+                {winner === 'Draw' ? (
+                  <span className="text-2xl font-bold text-gray-600">תיקו!</span>
+                ) : (
+                  <span className="text-2xl font-bold">
+                    המנצח: <span className={winner === 'X' ? 'text-indigo-600' : 'text-rose-500'}>{winner}</span>!
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center">
+                <span className="text-sm font-semibold text-gray-400 mb-1">תור עכשיו</span>
+                <span className={`text-2xl font-black ${xIsNext ? 'text-indigo-600' : 'text-rose-500'}`}>
+                  {xIsNext ? 'X' : 'O'}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className={`flex flex-col items-center p-3 rounded-2xl transition-all w-24 ${!xIsNext && !winner ? 'bg-rose-50 ring-2 ring-rose-200 scale-110 shadow-md' : 'opacity-70'}`}>
+            <span className="text-3xl font-black text-rose-500">O</span>
+            <span className="text-xl font-bold text-gray-700 mt-1">{scores.O}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mb-6 relative">
+          {board.map((_, index) => renderSquare(index))}
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={resetGame} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors shadow-md active:scale-95">
+            {winner ? 'סיבוב נוסף' : 'התחל מחדש'}
+          </button>
+          <button onClick={fullReset} className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold rounded-xl transition-colors active:scale-95 text-sm">
+            איפוס תוצאות
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// אפליקציה ראשית (תפריט וניהול מצב)
+// ==========================================
+export default function App() {
+  // מצב ששומר איזה משחק פעיל עכשיו: null (תפריט), 'memory', או 'tictactoe'
+  const [activeGame, setActiveGame] = useState(null);
+
+  return (
+    <div dir="rtl" className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 font-sans p-4 sm:p-8">
       
-      {/* הוספת סגנונות CSS ייעודיים לאנימציית ההיפוך (תלת מימד) */}
+      {/* סגנונות גלובליים לאנימציות ותלת מימד */}
       <style dangerouslySetInnerHTML={{__html: `
         .perspective-1000 { perspective: 1000px; }
         .transform-style-3d { transform-style: preserve-3d; }
         .backface-hidden { backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
+        @keyframes bounce-in {
+          0% { transform: scale(0.5); opacity: 0; }
+          60% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(1); }
+        }
+        .animate-bounce-in { animation: bounce-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
       `}} />
 
-      <div className="max-w-xl w-full">
-        {/* כותרת ונתונים */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-indigo-900 mb-4 tracking-tight drop-shadow-sm">
-            משחק זיכרון
-          </h1>
-          
-          {/* לוח תוצאות ותור */}
-          <div className="bg-white/60 backdrop-blur-md rounded-2xl p-4 shadow-sm border border-white/50 mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <div className={`p-3 rounded-xl transition-all ${currentPlayer === 1 ? 'bg-indigo-500 text-white shadow-md scale-105' : 'bg-transparent text-indigo-800'}`}>
-                <p className="font-bold text-lg">שחקן 1</p>
-                <p className="text-2xl text-center">{scores[1]}</p>
-              </div>
-              
-              <div className="text-center">
-                <p className="text-sm font-semibold text-gray-500 mb-1">תור עכשיו</p>
-                <div className="text-xl font-black text-indigo-700 bg-indigo-100 px-4 py-1 rounded-full shadow-sm border border-indigo-200">
-                  שחקן {currentPlayer}
-                </div>
-              </div>
+      {activeGame === null && (
+        <div className="max-w-3xl mx-auto flex flex-col items-center pt-10">
+          <div className="text-center mb-12 animate-bounce-in">
+            <h1 className="text-5xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 mb-4 drop-shadow-sm">
+              מרכז המשחקים
+            </h1>
+            <p className="text-xl text-gray-600 font-medium">בחר משחק כדי להתחיל</p>
+          </div>
 
-              <div className={`p-3 rounded-xl transition-all ${currentPlayer === 2 ? 'bg-purple-500 text-white shadow-md scale-105' : 'bg-transparent text-purple-800'}`}>
-                <p className="font-bold text-lg">שחקן 2</p>
-                <p className="text-2xl text-center">{scores[2]}</p>
-              </div>
-            </div>
-            
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 w-full">
+            {/* קוביית משחק: איקס עיגול */}
             <button 
-              onClick={initializeGame}
-              className="w-full py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-medium rounded-xl transition-colors active:scale-95"
+              onClick={() => setActiveGame('tictactoe')}
+              className="group aspect-square sm:aspect-auto sm:h-64 bg-white/80 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col items-center justify-center border-2 border-transparent hover:border-indigo-200"
             >
-              התחל משחק חדש
+              <div className="text-7xl mb-6 transform group-hover:scale-110 transition-transform duration-300">
+                ❌⭕
+              </div>
+              <h2 className="text-3xl font-bold text-gray-800">איקס עיגול</h2>
+              <p className="text-gray-500 mt-2 font-medium">הקלאסיקה לשני שחקנים</p>
+            </button>
+
+            {/* קוביית משחק: זיכרון */}
+            <button 
+              onClick={() => setActiveGame('memory')}
+              className="group aspect-square sm:aspect-auto sm:h-64 bg-white/80 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 flex flex-col items-center justify-center border-2 border-transparent hover:border-purple-200"
+            >
+              <div className="text-7xl mb-6 transform group-hover:scale-110 transition-transform duration-300">
+                🃏🧠
+              </div>
+              <h2 className="text-3xl font-bold text-gray-800">משחק זיכרון</h2>
+              <p className="text-gray-500 mt-2 font-medium">מצא את כל 5 הזוגות</p>
             </button>
           </div>
         </div>
+      )}
 
-        {/* לוח הקלפים (הותאם ל-5 עמודות) */}
-        <div className="grid grid-cols-5 gap-2 sm:gap-3 md:gap-4 perspective-1000">
-          {cards.map((card, index) => (
-            <div 
-              key={card.id}
-              className="relative w-full aspect-[3/4] cursor-pointer group perspective-1000"
-              onClick={() => handleCardClick(index)}
-            >
-              <div 
-                className={`w-full h-full transition-transform duration-500 transform-style-3d relative rounded-2xl shadow-md
-                  ${(card.isFlipped || card.isMatched) ? 'rotate-y-180' : ''}
-                  ${card.isMatched ? 'opacity-70' : ''}
-                `}
-              >
-                {/* צד קדמי (הגב של הקלף) */}
-                <div className="absolute inset-0 backface-hidden bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center border-2 border-indigo-300/30 group-hover:shadow-lg transition-shadow">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-white/30 rounded-full flex items-center justify-center">
-                    <span className="text-white/50 text-lg sm:text-xl font-bold">?</span>
-                  </div>
-                </div>
+      {/* רינדור המשחק הנבחר */}
+      {activeGame === 'memory' && <MemoryGame onBack={() => setActiveGame(null)} />}
+      {activeGame === 'tictactoe' && <TicTacToe onBack={() => setActiveGame(null)} />}
 
-                {/* צד אחורי (האמוג'י) */}
-                <div className="absolute inset-0 backface-hidden rotate-y-180 bg-white rounded-2xl flex items-center justify-center text-4xl sm:text-5xl border-2 border-purple-200">
-                  {card.emoji}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* הודעת ניצחון מעודכנת */}
-        {isWon && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-bounce-in">
-              <div className="text-6xl mb-4">🏆</div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">המשחק נגמר!</h2>
-              <p className="text-xl text-gray-600 mb-6 font-medium">
-                {scores[1] > scores[2] ? 'שחקן 1 ניצח!' : 
-                 scores[2] > scores[1] ? 'שחקן 2 ניצח!' : 
-                 'תיקו!'}
-              </p>
-              <div className="flex justify-center gap-6 mb-6 text-lg">
-                <div className="text-center"><span className="block font-bold text-indigo-600">שחקן 1</span> {scores[1]} זוגות</div>
-                <div className="text-center"><span className="block font-bold text-purple-600">שחקן 2</span> {scores[2]} זוגות</div>
-              </div>
-              <button 
-                onClick={initializeGame}
-                className="w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-lg"
-              >
-                שחק שוב
-              </button>
-            </div>
-          </div>
-        )}
-
-      </div>
     </div>
   );
 }
